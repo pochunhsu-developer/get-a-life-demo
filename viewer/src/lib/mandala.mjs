@@ -70,6 +70,17 @@ function parseFile(filename) {
     };
   });
 
+  // 守門：一塊地只有 8 個槽。活著（非 archived）的小格超過 8 個就 fail loud——
+  // 不然 renderer 會默默吞掉第 9 個之後，照妖鏡卻把東西藏起來不告訴你（最糟的失敗）。
+  // 要再加焦點，先把某個舊的 archived: true（封存釋放槽位），或手動換詞。
+  const aliveCount = cells.filter((c) => !c.archived).length;
+  if (aliveCount > 8) {
+    throw new Error(
+      `「${data['大格']}」有 ${aliveCount} 個活著的小格，超過上限 8（${filename}）。` +
+        `封存或合併一些——一塊地同時專注不了超過 8 件事。`
+    );
+  }
+
   return {
     filename,
     field: data['大格'],

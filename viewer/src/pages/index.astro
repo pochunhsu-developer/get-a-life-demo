@@ -23,11 +23,14 @@ function tone(fresh) {
 function buildSlots(field) {
   const slots = new Array(9).fill(null);
   slots[4] = { kind: 'name', field };
-  field.cells.forEach((cell, i) => {
-    if (i >= CELL_SLOTS.length) return;
-    const fresh = freshness(cell.lastTended, today);
-    slots[CELL_SLOTS[i]] = { kind: 'cell', cell, tone: tone(fresh) };
-  });
+  // 只排活著的小格；封存的不佔槽位（資料層已守門：活著的 ≤ 8）。
+  field.cells
+    .filter((cell) => !cell.archived)
+    .forEach((cell, i) => {
+      if (i >= CELL_SLOTS.length) return;
+      const fresh = freshness(cell.lastTended, today);
+      slots[CELL_SLOTS[i]] = { kind: 'cell', cell, tone: tone(fresh) };
+    });
   return slots;
 }
 ---
