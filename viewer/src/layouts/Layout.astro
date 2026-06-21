@@ -15,23 +15,20 @@ const { title = 'Get a Life' } = Astro.props;
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <style is:global>
-      /* 蘭陽明體：先抓本機已裝的（不下載），抓不到才用打包檔保證顯示 */
+      /* 自訂襯線字（選用）：放你自己有授權的明體 .otf 到 public/fonts/。
+         repo 不附字型；沒放就自動退到系統襯線字（見 --font-serif）。
+         說明見 public/fonts/README.md。 */
       @font-face {
-        font-family: 'LanyangMing';
-        src: local('jf蘭陽明體2.0 W3'),
-             local('jf-lanyangming-2.0-Book'),
-             local('jf蘭陽明體2.0'),
-             url('/fonts/jf-lanyangming-2.0-book.otf') format('opentype');
+        font-family: 'CustomSerif';
+        src: url('/fonts/serif-regular.otf') format('opentype');
         font-weight: 400;
         font-style: normal;
         font-display: swap;
       }
-      /* W6 半粗：用真的 semibold，而不是把 W3 假性加粗（CJK 明體 faux bold 會糊） */
+      /* 半粗：用真的 semibold，而不是把 regular 假性加粗（CJK 明體 faux bold 會糊） */
       @font-face {
-        font-family: 'LanyangMing';
-        src: local('jf蘭陽明體2.0 W6'),
-             local('jf-lanyangming-2.0-SemiBold'),
-             url('/fonts/jf-lanyangming-2.0-semibold.otf') format('opentype');
+        font-family: 'CustomSerif';
+        src: url('/fonts/serif-semibold.otf') format('opentype');
         font-weight: 600 700;
         font-style: normal;
         font-display: swap;
@@ -54,7 +51,7 @@ const { title = 'Get a Life' } = Astro.props;
         --cell-fresh: #FFFFFF;
         --cell-floor: #F1F2F4;
 
-        --font-serif: 'LanyangMing', 'Georgia', serif;
+        --font-serif: 'CustomSerif', 'Songti TC', 'Noto Serif CJK TC', 'Georgia', serif;
         --font-sans:  system-ui, sans-serif;
         --font-mono:  'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
       }

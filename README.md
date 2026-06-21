@@ -70,12 +70,13 @@ last_tended: 2026-06-18
 點小格寫回 `.md` 靠 dev server 的 on-demand API route，必須 `npm run dev`（或 Docker）在本機跑。
 **純靜態 build／靜態托管無法寫回**——這是刻意的：你的資料留在你自己的機器上，工具只是一層皮。
 
-## 字型（選用）
+## 字型（選用，自備）
 
-UI 的襯線字預設用 [蘭陽明體（jf-lanyangming）](https://justfont.com/lanyang/)——justfont 免費釋出的開源台灣明體。
-repo **不打包**字型檔（14MB 太肥、且尊重各自授權）。沒安裝也沒關係，會自動退到 `Georgia` / 系統襯線字。
-想要原始視覺，把 `.otf` 放進 [viewer/public/fonts/](viewer/public/fonts/)（檔名見該資料夾說明）即可。
+UI 的襯線字走「自訂明體 → 系統襯線字」的退路。**repo 不附任何字型檔**——
+許多漂亮的中文明體是付費商用字型，不能連同公開 repo 一起散布。你不放也能跑，會自動退到
+`Songti TC` / `Noto Serif CJK` / `Georgia` 等系統字。想換成自己偏好的明體，把**你有授權的**
+`.otf` 放進 [viewer/public/fonts/](viewer/public/fonts/)（檔名固定，見該資料夾說明）即可。
 
 ## License
 
-[MIT](LICENSE)。code 與設計筆記隨意取用；範例資料是架空的。
+[MIT](LICENSE)。code 與設計筆記隨意取用；範例資料是架空的。字型需自備（見上）。
