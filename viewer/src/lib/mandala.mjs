@@ -34,7 +34,15 @@ const oneLine = (s) => String(s ?? '').replace(/\s*\r?\n\s*/g, ' ').trim();
 
 export function readFields() {
   const files = fs.readdirSync(MANDALA_DIR).filter((f) => FILE_RE.test(f));
-  return files.map(parseFile).sort((a, b) => a.position - b.position);
+  const fields = files.map(parseFile).sort((a, b) => a.position - b.position);
+  // 跨檔守門：兩塊地不能搶同一個九宮格位置（否則畫面上一塊會靜默蓋掉另一塊）。
+  const seen = new Map();
+  for (const f of fields) {
+    if (seen.has(f.position))
+      throw new Error(`position ${f.position} 重複：${seen.get(f.position)} 與 ${f.filename} 搶同一格。`);
+    seen.set(f.position, f.filename);
+  }
+  return fields;
 }
 
 // js-yaml 會把 `2026-06-15` 自動解析成 Date 物件，統一轉回 YYYY-MM-DD 字串，
@@ -55,7 +63,19 @@ function parseFile(filename) {
   const raw = fs.readFileSync(path.join(MANDALA_DIR, filename), 'utf8');
   const { fm, body } = splitFrontmatter(raw);
   const data = yaml.load(fm) || {};
-  const { annByWord, nextByWord } = parseBody(body);
+  const { annByWord, nextByWord, bodyWords } = parseBody(body);
+
+  // 結構守門：壞掉的檔要 fail loud，不要靜默漏一塊地或錯置資料。
+  const VALID_POS = new Set([1, 2, 3, 4, 6, 7, 8, 9]);
+  if (data['大格'] == null || data.position == null)
+    throw new Error(`${filename} 缺少 frontmatter 的「大格」或 position（檔案壞了或沒有 frontmatter）。`);
+  if (!VALID_POS.has(data.position))
+    throw new Error(`${filename} 的 position=${data.position} 不合法：要是 1–9 且非 5（5 是中央「Get a Life」）。`);
+  const fmWords = (data['小格'] || []).map((c) => c['詞']);
+  const dupFm = fmWords.find((w, i) => fmWords.indexOf(w) !== i);
+  if (dupFm != null) throw new Error(`${filename} 的 frontmatter 有重複小格「${dupFm}」。`);
+  const dupBody = bodyWords.find((w, i) => bodyWords.indexOf(w) !== i);
+  if (dupBody != null) throw new Error(`${filename} 的 body 有重複的「## ${dupBody}」區塊。`);
 
   const cells = (data['小格'] || []).map((c) => {
     const word = c['詞'];
@@ -103,12 +123,14 @@ const NEXT_RE = /^→\s*下一步\s*[—-]?\s*(.*)$/;
 function parseBody(body) {
   const annByWord = {};
   const nextByWord = {};
+  const bodyWords = []; // 依出現順序記每個 `## 詞`，給 parseFile 偵測重複區塊
   let current = null;
   for (const line of body.split('\n')) {
     const h = line.match(/^##\s+(.+?)\s*$/);
     if (h) {
       current = h[1];
-      annByWord[current] = [];
+      bodyWords.push(current);
+      if (!annByWord[current]) annByWord[current] = []; // 不在這 reset，重複交給 parseFile fail loud
       continue;
     }
     if (!current) continue;
@@ -118,11 +140,15 @@ function parseBody(body) {
       if (t) nextByWord[current] = t; // 空的當作沒設
       continue;
     }
-    const dm = line.match(/^-\s*(\d{4}-\d{2}-\d{2})\s*[—-]?\s*(.*)$/);
-    if (dm) annByWord[current].push({ date: dm[1], text: dm[2].trim() });
+    // 日期接受未補零（手改常見 `2026-6-1`），一律正規化成 YYYY-MM-DD，避免無聲掉資料。
+    const dm = line.match(/^-\s*(\d{4})-(\d{1,2})-(\d{1,2})\s*[—-]?\s*(.*)$/);
+    if (dm) {
+      const date = `${dm[1]}-${dm[2].padStart(2, '0')}-${dm[3].padStart(2, '0')}`;
+      annByWord[current].push({ date, text: dm[4].trim() });
+    }
   }
   for (const k of Object.keys(annByWord)) annByWord[k].sort((a, b) => a.date.localeCompare(b.date));
-  return { annByWord, nextByWord };
+  return { annByWord, nextByWord, bodyWords };
 }
 
 // 連續枯萎：state=fog（無註記）/ alive；level 0=剛照料(亮) → 1=枯到底(暗)。
