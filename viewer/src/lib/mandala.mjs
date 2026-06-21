@@ -22,6 +22,11 @@ export const MANDALA_DIR = process.env.MANDALA_DIR
 const FILE_RE = /^\d-.*\.md$/;
 const DATE_RE = /\d{4}-\d{2}-\d{2}/;
 
+// 把可能多行的使用者輸入壓成單行：註記與下一步在 .md 裡都是「一行」格式。
+// 直接寫入換行會 (a) 讓第二行起的內容在解析時被當雜訊丟掉（資料無聲消失），
+// (b) 若某行以 `## ` 或 `- 日期` 開頭，還會注入假標題/假註記、汙染整個檔。
+const oneLine = (s) => String(s ?? '').replace(/\s*\r?\n\s*/g, ' ').trim();
+
 // 九宮格位置 → 大格（中央 5 是「Get a Life」標題，無檔案）。
 //  1 經濟    2 信仰    3 健康
 //  4 工作事業 (5 中央)  6 人際
@@ -147,7 +152,7 @@ export function addAnnotation({ filename, word, text, date }) {
   const full = path.join(MANDALA_DIR, filename);
   const raw = fs.readFileSync(full, 'utf8');
   const { fm, body } = splitFrontmatter(raw);
-  const newBody = insertAnnotation(body, word, `- ${date} — ${text.trim()}`);
+  const newBody = insertAnnotation(body, word, `- ${date} — ${oneLine(text)}`);
   const newFm = updateLastTended(fm, word, date);
   fs.writeFileSync(full, `---\n${newFm}\n---\n${newBody}`, 'utf8');
 }
@@ -203,7 +208,7 @@ export function setNextStep({ filename, word, text }) {
   const full = path.join(MANDALA_DIR, filename);
   const raw = fs.readFileSync(full, 'utf8');
   const { fm, body } = splitFrontmatter(raw);
-  const newBody = writeNextStep(body, word, (text || '').trim());
+  const newBody = writeNextStep(body, word, oneLine(text));
   fs.writeFileSync(full, `---\n${fm}\n---\n${newBody}`, 'utf8');
 }
 
