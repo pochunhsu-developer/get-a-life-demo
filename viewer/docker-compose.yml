@@ -1,0 +1,14 @@
+# 本機工具層。`docker compose up --build` → http://localhost:4321
+services:
+  viewer:
+    build: .
+    container_name: get-a-life-viewer
+    ports:
+      - "4321:4321"
+    environment:
+      - MANDALA_DIR=/data
+    volumes:
+      - .:/app                 # 工具層原始碼（改了即時 reload）
+      - /app/node_modules      # 保留容器內裝好的 node_modules，別被 host 蓋掉
+      # 資料層：預設掛隨附的架空範例。改成 ../mandala 即指向你自己的真實日記。
+      - ../demo-mandala:/data

@@ -1,0 +1,662 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { readFields, freshness, fieldFreshness } from '../lib/mandala.mjs';
+
+export const prerender = false; // 每次載入讀最新 .md，dev 下即時反映寫回
+
+const today = new Date();
+const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+const fields = readFields();
+const byPos = new Map(fields.map((f) => [f.position, f]));
+
+const GRID = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+const CELL_SLOTS = [0, 1, 2, 3, 5, 6, 7, 8]; // 小格 i → 3×3 slot（中央 4 留給大格名）
+
+function tone(fresh) {
+  if (fresh.state === 'fog') return { intensity: 0, label: '迷霧', cls: 'fog' };
+  const intensity = 1 - fresh.level; // 1 新鮮 → 0 枯
+  const label = fresh.days < 60 ? `${fresh.days}d` : `${Math.floor(fresh.days / 30)}mo`;
+  return { intensity, label, cls: 'alive' };
+}
+
+function buildSlots(field) {
+  const slots = new Array(9).fill(null);
+  slots[4] = { kind: 'name', field };
+  field.cells.forEach((cell, i) => {
+    if (i >= CELL_SLOTS.length) return;
+    const fresh = freshness(cell.lastTended, today);
+    slots[CELL_SLOTS[i]] = { kind: 'cell', cell, tone: tone(fresh) };
+  });
+  return slots;
+}
+---
+
+<Layout title="Get a Life">
+  <main>
+    <div class="mandala">
+      {GRID.map((pos) => {
+        if (pos === 5) {
+          return (
+            <div class="field field-center">
+              <span class="center-main">Get<br />a<br />Life</span>
+            </div>
+          );
+        }
+        const field = byPos.get(pos);
+        if (!field) return <div class="field field-empty"></div>;
+        const ff = fieldFreshness(field, today);
+        const glow = ff.state === 'fog' ? 0 : (1 - ff.level).toFixed(2);
+        const slots = buildSlots(field);
+        return (
+          <div class="field" style={`--field-glow:${glow}`}>
+            {slots.map((slot) => {
+              if (!slot) return <div class="slot empty"></div>;
+              if (slot.kind === 'name')
+                return <div class="slot name">{slot.field.field}</div>;
+              const { cell, tone: t } = slot;
+              return (
+                <button
+                  class={`slot cell ${t.cls}${cell.nextStep ? ' has-next' : ''}`}
+                  style={`--i:${t.intensity.toFixed(2)}`}
+                  data-filename={field.filename}
+                  data-word={cell.word}
+                  data-count={cell.annotations.length}
+                  data-latest={cell.lastTended ?? ''}
+                  data-notes={JSON.stringify(cell.annotations)}
+                  data-next={cell.nextStep ?? ''}
+                  title={cell.word}
+                >
+                  <span class="word">{cell.word}</span>
+                  <span class="age font-mono">{t.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  </main>
+
+  <span class="stamp font-mono">Get a Life · {todayStr} · 左鍵記一筆 · 右鍵標下一步</span>
+
+  <!-- 看：緊貼小格旁的小卡，列最近五則 -->
+  <div id="view" class="view-pop" hidden>
+    <div class="view-head">
+      <span id="view-word" class="font-serif"></span>
+      <span id="view-meta" class="font-mono"></span>
+    </div>
+    <div id="view-next" class="view-next font-mono" hidden></div>
+    <ul id="view-log" class="annot-log view"></ul>
+    <button type="button" id="view-add" class="view-add font-mono">＋ 新增一筆</button>
+  </div>
+
+  <!-- 右鍵：標下一步（想清楚但還沒開始做的一步，一格至多一個）-->
+  <div id="nextstep" class="ns-pop" hidden>
+    <div class="ns-head">
+      <span id="ns-word" class="font-serif"></span>
+      <span class="ns-sub font-mono">下一步</span>
+    </div>
+    <textarea id="ns-text" rows="2" placeholder="想清楚了、但還沒開始做的那一步。"></textarea>
+    <div class="ns-row">
+      <button type="button" id="ns-clear" class="ns-clear font-mono">清除</button>
+      <div class="ns-actions">
+        <button type="button" id="ns-cancel" class="font-mono">取消</button>
+        <button type="button" id="ns-save" class="font-mono">記下</button>
+      </div>
+    </div>
+    <p id="ns-err" class="annot-err"></p>
+  </div>
+
+  <!-- 寫：按了「新增」才進來的置中 dialog -->
+  <dialog id="annot">
+    <form id="annot-form">
+      <div class="annot-head">
+        <span id="annot-word" class="font-serif"></span>
+        <span class="annot-sub font-mono">新增一筆</span>
+      </div>
+      <textarea id="annot-text" rows="3" placeholder="這個月你在這塊地做了／想了什麼？標記，不是填滿。"></textarea>
+      <div class="annot-row">
+        <input id="annot-date" type="date" class="font-mono" />
+        <div class="annot-actions">
+          <button type="button" id="annot-cancel">取消</button>
+          <button type="submit" id="annot-submit">記下</button>
+        </div>
+      </div>
+      <p id="annot-err" class="annot-err"></p>
+    </form>
+  </dialog>
+</Layout>
+
+<script define:vars={{ todayStr }}>
+  // 看：旁邊小卡
+  const view = document.getElementById('view');
+  const vWord = document.getElementById('view-word');
+  const vMeta = document.getElementById('view-meta');
+  const vNext = document.getElementById('view-next');
+  const vLog = document.getElementById('view-log');
+  const vAdd = document.getElementById('view-add');
+  // 右鍵：下一步編輯小卡
+  const nsPop = document.getElementById('nextstep');
+  const nsWord = document.getElementById('ns-word');
+  const nsText = document.getElementById('ns-text');
+  const nsClear = document.getElementById('ns-clear');
+  const nsErr = document.getElementById('ns-err');
+  let nsActive = null;
+
+  // 把彈出小卡定位在被點小格旁（右側優先，沒空間翻左，再夾進視窗）。
+  // 注意：呼叫前小卡必須已顯示，offsetWidth/Height 才量得到。
+  function placeNear(el, btn) {
+    const r = btn.getBoundingClientRect();
+    const pad = 8, pw = el.offsetWidth, ph = el.offsetHeight;
+    let left = r.right + pad;
+    if (left + pw > window.innerWidth - pad) left = r.left - pad - pw;
+    if (left < pad) left = pad;
+    let top = r.top;
+    if (top + ph > window.innerHeight - pad) top = window.innerHeight - pad - ph;
+    if (top < pad) top = pad;
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+  }
+  // 寫：置中 dialog
+  const dlg = document.getElementById('annot');
+  const elWord = document.getElementById('annot-word');
+  const elText = document.getElementById('annot-text');
+  const elDate = document.getElementById('annot-date');
+  const elErr = document.getElementById('annot-err');
+
+  let active = null;
+
+  function openView(btn) {
+    active = { filename: btn.dataset.filename, word: btn.dataset.word };
+    vWord.textContent = btn.dataset.word;
+    const notes = JSON.parse(btn.dataset.notes || '[]');
+    vMeta.textContent = notes.length
+      ? (notes.length > 5 ? `共 ${notes.length} 筆 · 最近 5` : `共 ${notes.length} 筆`)
+      : '迷霧';
+
+    // 下一步：有就顯示在小卡頂、註記之上
+    const next = btn.dataset.next || '';
+    if (next) { vNext.hidden = false; vNext.textContent = '下一步 — ' + next; }
+    else { vNext.hidden = true; vNext.textContent = ''; }
+
+    const recent = notes.slice(-5).reverse(); // 最新在上
+    if (recent.length) {
+      vLog.replaceChildren(...recent.map((n) => {
+        const li = document.createElement('li');
+        const d = document.createElement('span');
+        d.className = 'd font-mono';
+        d.textContent = n.date;
+        const t = document.createElement('span');
+        t.className = 't';
+        t.textContent = n.text;
+        li.append(d, t);
+        return li;
+      }));
+    } else {
+      const li = document.createElement('li');
+      li.className = 'none';
+      li.textContent = '還是迷霧 — 點下方新增第一筆';
+      vLog.replaceChildren(li);
+    }
+
+    view.hidden = false;
+    placeNear(view, btn);
+  }
+
+  const closeView = () => { view.hidden = true; };
+  const closeNext = () => { nsPop.hidden = true; nsActive = null; };
+
+  // 右鍵 → 直接開下一步編輯小卡（預填現有的；有設才顯示「清除」）
+  function openNext(btn) {
+    closeView();
+    nsActive = { filename: btn.dataset.filename, word: btn.dataset.word };
+    nsWord.textContent = btn.dataset.word;
+    nsText.value = btn.dataset.next || '';
+    nsErr.textContent = '';
+    nsClear.style.visibility = btn.dataset.next ? 'visible' : 'hidden';
+    nsPop.hidden = false;
+    placeNear(nsPop, btn);
+    nsText.focus();
+  }
+
+  async function saveNext(text) {
+    if (!nsActive) return;
+    const res = await fetch('/api/next-step', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...nsActive, text }),
+    });
+    if (res.ok) {
+      location.reload();
+    } else {
+      const j = await res.json().catch(() => ({}));
+      nsErr.textContent = j.error || '寫入失敗';
+    }
+  }
+
+  document.getElementById('ns-save').addEventListener('click', () => {
+    const text = nsText.value.trim();
+    if (!text) { nsErr.textContent = '寫點什麼，或按清除'; return; }
+    saveNext(text);
+  });
+  nsClear.addEventListener('click', () => saveNext('')); // 空字串 = 清除
+  document.getElementById('ns-cancel').addEventListener('click', closeNext);
+
+  document.querySelectorAll('.slot.cell').forEach((btn) => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); openView(btn); });
+    btn.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); openNext(btn); });
+  });
+
+  // 點小卡外面 / Esc 關閉檢視與下一步小卡
+  document.addEventListener('click', (e) => {
+    if (!view.hidden && !view.contains(e.target)) closeView();
+    if (!nsPop.hidden && !nsPop.contains(e.target)) closeNext();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!nsPop.hidden) closeNext();
+    else if (!view.hidden) closeView();
+  });
+
+  // 新增 → 進書寫 dialog
+  vAdd.addEventListener('click', () => {
+    closeView();
+    elWord.textContent = active.word;
+    elDate.value = todayStr;
+    elText.value = '';
+    elErr.textContent = '';
+    dlg.showModal();
+    elText.focus();
+  });
+
+  document.getElementById('annot-cancel').addEventListener('click', () => dlg.close());
+
+  document.getElementById('annot-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!active) return;
+    const text = elText.value.trim();
+    const date = elDate.value;
+    if (!text) { elErr.textContent = '寫點什麼吧'; return; }
+    if (!date) { elErr.textContent = '挑個日期'; return; }
+    const res = await fetch('/api/annotate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...active, text, date }),
+    });
+    if (res.ok) {
+      location.reload();
+    } else {
+      const j = await res.json().catch(() => ({}));
+      elErr.textContent = j.error || '寫入失敗';
+    }
+  });
+</script>
+
+<style>
+  main {
+    position: relative;
+    z-index: 1;
+    height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 2vmin;
+  }
+
+  .font-mono { font-family: var(--font-mono); }
+  .font-serif { font-family: var(--font-serif); }
+
+  /* 不佔版面流的角落小標 */
+  .stamp {
+    position: fixed;
+    top: 0.9rem;
+    left: 1.1rem;
+    z-index: 100;
+    font-size: 0.66rem;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
+    pointer-events: none;
+  }
+
+  /* ── 九宮格：鎖成填滿視窗的正方形，一眼看完 ── */
+  .mandala {
+    --s: min(90vw, 90vh);
+    width: var(--s);
+    height: var(--s);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 16px; /* 大格之間的大縫：靠親疏分組，縫隙露出底下地形 */
+  }
+
+  /* 大格不再是卡片，只是一群土地的鬆散聚落，由間距界定 */
+  .field {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 3px; /* 小格之間的小縫 */
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .slot {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    padding: 1px;
+    overflow: hidden;
+    text-align: center;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    font-family: var(--font-serif);
+    font-size: clamp(0.55rem, 1.35vmin, 0.82rem);
+    line-height: 1.12;
+    color: var(--text-muted);
+  }
+
+  .slot .word {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+  }
+
+  .slot .age {
+    font-size: clamp(0.44rem, 0.95vmin, 0.6rem);
+    letter-spacing: 0.02em;
+    opacity: 0.7;
+  }
+
+  /* 大格名（中央格） */
+  /* 路標磚：同一套土地語言，但用字體區分；明度 = 這塊大格的整體新鮮度（鳥瞰訊號搬到這） */
+  .slot.name {
+    position: relative;
+    font-size: clamp(0.7rem, 1.65vmin, 1rem);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--cell-fresh) calc(var(--field-glow, 0) * 100%), var(--cell-floor));
+    border-color: var(--border);
+    box-shadow: 0 calc(2px * var(--field-glow, 0)) calc(7px * var(--field-glow, 0)) rgba(0, 0, 0, calc(0.10 * var(--field-glow, 0)));
+  }
+  /* 8 塊地骨幹：內縮的墨綠細框，把綠集中在這 8 格 */
+  .slot.name::before {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border: 1px solid var(--accent);
+    pointer-events: none;
+  }
+
+  /* 活著的小格：越新鮮越亮、越透墨綠 */
+  .slot.cell {
+    position: relative;
+    cursor: pointer;
+    transition: outline-color 100ms, transform 80ms;
+    outline: 1px solid transparent;
+  }
+  /* 有「下一步」：右下角一抹柔和鼠尾草綠直角三角（靜態，獨立於新鮮度明度）。
+     墨綠往格子受光面（--cell-fresh）調淡，比飽和 accent 含蓄，貼整體克制的綠語言。 */
+  .slot.cell.has-next::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 0 0 9px 9px;
+    border-color: transparent transparent
+      color-mix(in srgb, var(--accent) 50%, var(--cell-fresh)) transparent;
+    pointer-events: none;
+  }
+  /* 活著的小格：新鮮度 = 明度（白 → 灰白），不是綠色色相 */
+  .slot.cell.alive {
+    background: color-mix(in srgb, var(--cell-fresh) calc(var(--i) * 100%), var(--cell-floor));
+    color: color-mix(in srgb, var(--text) calc(var(--i) * 100%), var(--text-muted));
+    /* 取消綠頂線：新鮮度只用明度（白→灰）表達，綠集中在 8 骨幹格 */
+    border-top-color: transparent;
+    /* 微陰影：越新鮮越浮起 */
+    box-shadow: 0 calc(2px * var(--i)) calc(7px * var(--i)) rgba(0, 0, 0, calc(0.10 * var(--i)));
+  }
+  /* age 數字用墨綠當點綴，新鮮越濃 */
+  .slot.cell.alive .age {
+    color: color-mix(in srgb, var(--accent) calc(var(--i) * 100%), var(--text-muted));
+    opacity: 1;
+  }
+  /* 迷霧：虛線框、黯淡，誠實留白 */
+  .slot.cell.fog {
+    background: transparent;
+    border-style: dashed;
+    border-color: var(--border-mid);
+    color: var(--text-muted);
+    opacity: 0.62;
+  }
+  .slot.cell:hover {
+    outline-color: var(--accent);
+    transform: translateY(-1px);
+  }
+
+  .field-empty { background: transparent; border: none; box-shadow: none; }
+
+  /* 中央「Get a Life」大格 */
+  .field-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .center-main {
+    font-family: var(--font-serif);
+    font-size: clamp(0.9rem, 2.4vmin, 1.35rem);
+    letter-spacing: 0.06em;
+    line-height: 1.3;
+    text-align: center;
+    color: var(--bg);
+  }
+
+  /* ── 註記 dialog ── */
+  dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    border: 1px solid var(--border-mid);
+    background: var(--bg);
+    color: var(--text);
+    padding: 0;
+    width: min(92vw, 420px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.32); }
+
+  #annot-form { padding: 1.25rem 1.25rem 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+
+  .annot-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+  #annot-word { font-size: 1.05rem; color: var(--accent); }
+  #annot-meta { font-size: 0.66rem; color: var(--text-muted); }
+
+  .annot-log {
+    list-style: none;
+    max-height: 32vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    margin: 0.1rem 0;
+    padding-right: 0.25rem;
+  }
+  /* 這些 li/.d/.t 是 JS 動態產生、不帶 Astro scope 屬性，
+     用 :global() 才選得到（否則 scoped 規則漏掉它們、字型退回預設） */
+  .annot-log :global(li) { display: flex; flex-direction: column; gap: 0.12rem; }
+  .annot-log :global(.d) {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: var(--text-muted);
+    letter-spacing: 0.03em;
+  }
+  .annot-log :global(.t) {
+    font-family: var(--font-serif);
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--text);
+  }
+  .annot-log :global(li.none) {
+    font-family: var(--font-serif);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  /* 檢視小卡的最近五則：截斷成兩行 */
+  .annot-log.view :global(.t) {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* ── 看：緊貼小格旁的小卡 ── */
+  .view-pop {
+    position: fixed;
+    z-index: 200;
+    width: min(78vw, 300px);
+    background: var(--bg);
+    border: 1px solid var(--border-mid);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    padding: 0.8rem 0.85rem 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  .view-pop[hidden] { display: none; }
+
+  .view-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  #view-word { font-size: 0.98rem; color: var(--accent); }
+  #view-meta { font-size: 0.62rem; color: var(--text-muted); }
+
+  .view-add {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    padding: 0.45rem;
+    border: 1px solid var(--accent);
+    background: var(--bg);
+    color: var(--accent);
+    cursor: pointer;
+    transition: background 100ms, color 100ms;
+  }
+  .view-add:hover { background: var(--accent); color: var(--bg); }
+
+  /* 小卡裡的下一步：墨綠左槓，跟註記 log 區隔 */
+  .view-next {
+    font-size: 0.72rem;
+    line-height: 1.4;
+    color: var(--accent);
+    border-left: 2px solid var(--accent);
+    padding: 0.1rem 0 0.1rem 0.5rem;
+    letter-spacing: 0.02em;
+  }
+  .view-next[hidden] { display: none; }
+
+  /* ── 右鍵：下一步編輯小卡（沿用檢視小卡的形狀） ── */
+  .ns-pop {
+    position: fixed;
+    z-index: 200;
+    width: min(78vw, 300px);
+    background: var(--bg);
+    border: 1px solid var(--border-mid);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    padding: 0.8rem 0.85rem 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  .ns-pop[hidden] { display: none; }
+  .ns-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+  #ns-word { font-size: 0.98rem; color: var(--accent); }
+  .ns-sub { font-size: 0.62rem; color: var(--text-muted); }
+  #ns-text {
+    width: 100%;
+    resize: vertical;
+    border: 1px solid var(--border-mid);
+    background: var(--bg-card);
+    color: var(--text);
+    font-family: var(--font-serif);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    padding: 0.55rem 0.65rem;
+  }
+  #ns-text:focus { outline: 1px solid var(--accent); }
+  .ns-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .ns-actions { display: flex; gap: 0.5rem; }
+  .ns-pop button {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    padding: 0.4rem 0.9rem;
+    border: 1px solid var(--border-mid);
+    background: var(--bg);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 100ms, border-color 100ms;
+  }
+  .ns-pop button:hover { color: var(--accent); border-color: var(--accent); }
+  #ns-save { color: var(--accent); border-color: var(--accent); }
+  .ns-clear { color: #b4493f; border-color: #d8b4ae; }
+  .ns-clear:hover { color: #b4493f; border-color: #b4493f; }
+
+  .annot-sub { font-size: 0.66rem; color: var(--text-muted); }
+
+  #annot-text {
+    width: 100%;
+    resize: vertical;
+    border: 1px solid var(--border-mid);
+    background: var(--bg-card);
+    color: var(--text);
+    font-family: var(--font-serif);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    padding: 0.6rem 0.7rem;
+  }
+  #annot-text:focus { outline: 1px solid var(--accent); }
+
+  .annot-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .annot-actions { display: flex; gap: 0.5rem; }
+
+  #annot-date {
+    border: 1px solid var(--border-mid);
+    background: var(--bg-card);
+    color: var(--text);
+    font-size: 0.72rem;
+    padding: 0.35rem 0.5rem;
+  }
+
+  .annot-actions button {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    padding: 0.4rem 0.9rem;
+    border: 1px solid var(--border-mid);
+    background: var(--bg);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 100ms, border-color 100ms;
+  }
+  .annot-actions button:hover { color: var(--accent); border-color: var(--accent); }
+  #annot-submit { color: var(--accent); border-color: var(--accent); }
+
+  .annot-err { min-height: 1em; font-size: 0.68rem; color: #b4493f; }
+</style>

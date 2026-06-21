@@ -1,0 +1,30 @@
+# 你自己的真實日記——永遠不要進公開 repo
+/mandala/
+
+# Node / Astro
+node_modules/
+.astro/
+dist/
+build/
+out/
+
+# 字型檔不打包（太肥、尊重各自授權）；使用者自行放置
+viewer/public/fonts/*.otf
+viewer/public/fonts/*.ttf
+viewer/public/fonts/*.woff
+viewer/public/fonts/*.woff2
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*

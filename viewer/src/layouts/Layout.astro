@@ -1,0 +1,379 @@
+---
+interface Props {
+  title?: string;
+}
+const { title = 'Get a Life' } = Astro.props;
+---
+
+<!doctype html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <style is:global>
+      /* 蘭陽明體：先抓本機已裝的（不下載），抓不到才用打包檔保證顯示 */
+      @font-face {
+        font-family: 'LanyangMing';
+        src: local('jf蘭陽明體2.0 W3'),
+             local('jf-lanyangming-2.0-Book'),
+             local('jf蘭陽明體2.0'),
+             url('/fonts/jf-lanyangming-2.0-book.otf') format('opentype');
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+      /* W6 半粗：用真的 semibold，而不是把 W3 假性加粗（CJK 明體 faux bold 會糊） */
+      @font-face {
+        font-family: 'LanyangMing';
+        src: local('jf蘭陽明體2.0 W6'),
+             local('jf-lanyangming-2.0-SemiBold'),
+             url('/fonts/jf-lanyangming-2.0-semibold.otf') format('opentype');
+        font-weight: 600 700;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      :root {
+        color-scheme: light;
+        --bg:         #F8F8F9;
+        --bg-body:    #F2F3F4;
+        --bg-card:    #EDEEF0;
+        --text:       #1A1C1E;
+        --text-muted: #868B94;
+        --accent:     #3D6B5E;
+        --accent-rgb: 61, 107, 94;
+        --accent-bg:  rgba(61, 107, 94, 0.06);
+        --border:     rgba(26, 28, 30, 0.06);
+        --border-mid: rgba(26, 28, 30, 0.11);
+
+        /* 小格明度：剛照料(白) → 久未來過(灰白)。荒地另用灰虛線。 */
+        --cell-fresh: #FFFFFF;
+        --cell-floor: #F1F2F4;
+
+        --font-serif: 'LanyangMing', 'Georgia', serif;
+        --font-sans:  system-ui, sans-serif;
+        --font-mono:  'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+      }
+
+      [data-theme="dark"] {
+        color-scheme: dark;
+        --bg:         #1E2022;
+        --bg-body:    #17191B;
+        --bg-card:    #252729;
+        --text:       #D8DADC;
+        --text-muted: #636870;
+        --accent:     #6BA890;
+        --accent-rgb: 107, 168, 144;
+        --accent-bg:  rgba(107, 168, 144, 0.10);
+        --border:     rgba(216, 218, 220, 0.06);
+        --border-mid: rgba(216, 218, 220, 0.11);
+
+        /* 深色：剛照料(抬升受光的亮面) → 久未來過(沉回深灰) */
+        --cell-fresh: #3A3E42;
+        --cell-floor: #1F2123;
+      }
+
+      *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html {
+        background-color: var(--bg-body);
+        color: var(--text);
+        font-family: var(--font-sans);
+        font-size: 16px;
+        -webkit-font-smoothing: antialiased;
+        scrollbar-gutter: stable both-edges;
+      }
+
+      body {
+        min-height: 100vh;
+      }
+
+      body::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 9999;
+        opacity: 0.05;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+        background-size: 200px 200px;
+      }
+
+      .theme-transitioning,
+      .theme-transitioning * {
+        transition:
+          background-color 350ms ease,
+          color 250ms ease,
+          border-color 350ms ease !important;
+      }
+
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+      #bg-canvas {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      #theme-toggle {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        z-index: 100;
+        width: 32px;
+        height: 32px;
+        border: 1px solid var(--border-mid);
+        background: var(--bg);
+        color: var(--text-muted);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        font-family: var(--font-mono);
+        transition: color 100ms, border-color 100ms;
+        transform: rotate(45deg);
+      }
+
+      #theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+      #theme-toggle span {
+        transform: rotate(-45deg);
+        display: block;
+        line-height: 1;
+      }
+    </style>
+    <script is:inline>
+      if (localStorage.getItem('theme') === 'dark')
+        document.documentElement.setAttribute('data-theme', 'dark');
+    </script>
+  </head>
+  <body>
+    <canvas id="bg-canvas" aria-hidden="true"></canvas>
+    <slot />
+    <button id="theme-toggle" aria-label="切換深色模式">
+      <span id="theme-icon">○</span>
+    </button>
+    <script is:inline>
+      // ── 生成藝術背景 ──────────────────
+      const canvas = document.getElementById('bg-canvas');
+      const ctx = canvas.getContext('2d');
+
+      function resize() {
+        canvas.width  = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      resize();
+      window.addEventListener('resize', resize);
+
+      // ── 地形等高線背景（noise + marching squares，零依賴）──
+      const NOISE_SCALE  = 0.10;    // 取樣頻率，越大越多山丘 → 等高線越密
+      const CELL         = 18;      // 等高線取樣格 (px)
+      const LEVELS       = 28;      // 等高線條數（越多越密）
+      const DRIFT        = 0.00002; // 極緩漂移（越小越慢）
+      const SMOOTH_ITERS = 2;       // Chaikin 角切次數：折線 → 曲線
+
+      function accentRGB() {
+        return document.documentElement.getAttribute('data-theme') === 'dark'
+          ? '107, 168, 144' : '61, 107, 94';
+      }
+      function lineRGB() {
+        return document.documentElement.getAttribute('data-theme') === 'dark'
+          ? '216, 218, 220' : '26, 28, 30';
+      }
+
+      // value noise + fBm（自製高度場）
+      function hash(x, y) {
+        let n = (x * 374761393 + y * 668265263) | 0;
+        n = (n ^ (n >> 13)) * 1274126177 | 0;
+        return ((n ^ (n >> 16)) >>> 0) / 4294967296;
+      }
+      const smooth = (v) => v * v * (3 - 2 * v);
+      function vnoise(x, y) {
+        const xi = Math.floor(x), yi = Math.floor(y);
+        const xf = x - xi, yf = y - yi;
+        const u = smooth(xf), v = smooth(yf);
+        const tl = hash(xi, yi),     tr = hash(xi + 1, yi);
+        const bl = hash(xi, yi + 1), br = hash(xi + 1, yi + 1);
+        const top = tl + (tr - tl) * u;
+        const bot = bl + (br - bl) * u;
+        return top + (bot - top) * v;
+      }
+      function fbm(x, y) {
+        let sum = 0, amp = 0.5, freq = 1, norm = 0;
+        for (let o = 0; o < 4; o++) {
+          sum += amp * vnoise(x * freq, y * freq);
+          norm += amp; amp *= 0.5; freq *= 2;
+        }
+        return sum / norm;
+      }
+
+      // Chaikin 角切：把一條等高線折線平滑成曲線（業界標準做法之一）
+      function chaikin(line, closed, iters) {
+        let p = line;
+        for (let it = 0; it < iters; it++) {
+          if (p.length < 3) break;
+          const np = [];
+          const n = p.length;
+          if (!closed) np.push(p[0]);
+          const end = closed ? n : n - 1;
+          for (let i = 0; i < end; i++) {
+            const a = p[i], b = p[(i + 1) % n];
+            np.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25]);
+            np.push([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
+          }
+          if (!closed) np.push(p[n - 1]);
+          p = np;
+        }
+        return p;
+      }
+
+      // marching squares + 把同層線段串成連續輪廓（用 edge id 接合，不靠浮點比對）
+      function traceLevel(field, cols, rows, L) {
+        const pts = new Map();
+        const adj = new Map();
+        const HBASE = (rows + 1) * cols;
+        const hid = (i, j) => j * cols + i;             // 水平邊 (i,j)-(i+1,j)
+        const vid = (i, j) => HBASE + j * (cols + 1) + i; // 垂直邊 (i,j)-(i,j+1)
+        const put = (id, p) => { if (!pts.has(id)) pts.set(id, p); if (!adj.has(id)) adj.set(id, []); };
+        const link = (ia, pa, ib, pb) => { put(ia, pa); put(ib, pb); adj.get(ia).push(ib); adj.get(ib).push(ia); };
+
+        for (let j = 0; j < rows - 1; j++) {
+          for (let i = 0; i < cols - 1; i++) {
+            const a = field[j * cols + i], b = field[j * cols + i + 1];
+            const c = field[(j + 1) * cols + i + 1], d = field[(j + 1) * cols + i];
+            let idx = 0;
+            if (a > L) idx |= 8;
+            if (b > L) idx |= 4;
+            if (c > L) idx |= 2;
+            if (d > L) idx |= 1;
+            if (idx === 0 || idx === 15) continue;
+
+            const x0 = i * CELL, y0 = j * CELL, x1 = x0 + CELL, y1 = y0 + CELL;
+            const eT = hid(i, j),     pT = [x0 + CELL * (L - a) / (b - a), y0];
+            const eB = hid(i, j + 1), pB = [x0 + CELL * (L - d) / (c - d), y1];
+            const eL = vid(i, j),     pL = [x0, y0 + CELL * (L - a) / (d - a)];
+            const eR = vid(i + 1, j), pR = [x1, y0 + CELL * (L - b) / (c - b)];
+
+            switch (idx) {
+              case 1:  case 14: link(eL, pL, eB, pB); break;
+              case 2:  case 13: link(eB, pB, eR, pR); break;
+              case 3:  case 12: link(eL, pL, eR, pR); break;
+              case 4:  case 11: link(eT, pT, eR, pR); break;
+              case 6:  case 9:  link(eT, pT, eB, pB); break;
+              case 7:  case 8:  link(eL, pL, eT, pT); break;
+              case 5:  link(eL, pL, eT, pT); link(eB, pB, eR, pR); break;
+              case 10: link(eL, pL, eB, pB); link(eT, pT, eR, pR); break;
+            }
+          }
+        }
+
+        const walk = (start) => {
+          const line = [pts.get(start)];
+          let cur = start;
+          for (;;) {
+            const ns = adj.get(cur);
+            if (!ns || ns.length === 0) break;
+            const next = ns.pop();
+            const back = adj.get(next);
+            const bi = back.indexOf(cur);
+            if (bi >= 0) back.splice(bi, 1);
+            line.push(pts.get(next));
+            cur = next;
+          }
+          return line;
+        };
+
+        const lines = [];
+        for (const id of adj.keys()) while (adj.get(id).length === 1) lines.push(walk(id)); // 開放線先走
+        for (const id of adj.keys()) while (adj.get(id).length) lines.push(walk(id));        // 剩下的閉環
+        return lines;
+      }
+
+      let last = 0;
+      function draw(t) {
+        if (t - last < 70) { requestAnimationFrame(draw); return; } // 極緩 → 限流省 CPU
+        last = t;
+
+        const W = canvas.width, H = canvas.height;
+        ctx.clearRect(0, 0, W, H);
+
+        const cols = Math.ceil(W / CELL) + 1;
+        const rows = Math.ceil(H / CELL) + 1;
+        const driftX = t * DRIFT;
+        const driftY = Math.sin(t * DRIFT * 0.6) * 0.4;
+
+        const field = new Float32Array(cols * rows);
+        let fmin = Infinity, fmax = -Infinity;
+        for (let j = 0; j < rows; j++)
+          for (let i = 0; i < cols; i++) {
+            const val = fbm(i * NOISE_SCALE + driftX, j * NOISE_SCALE + driftY);
+            field[j * cols + i] = val;
+            if (val < fmin) fmin = val;
+            if (val > fmax) fmax = val;
+          }
+
+        const minor = new Path2D();
+        const major = new Path2D();
+
+        // 層級攤到實際高度範圍 → 線均勻、主曲線必出
+        for (let k = 1; k < LEVELS; k++) {
+          const L = fmin + (fmax - fmin) * (k / LEVELS);
+          const path = (k % 4 === 0) ? major : minor;
+          for (const line of traceLevel(field, cols, rows, L)) {
+            const closed = line.length > 2 &&
+              Math.abs(line[0][0] - line[line.length - 1][0]) < 1e-6 &&
+              Math.abs(line[0][1] - line[line.length - 1][1]) < 1e-6;
+            const sm = chaikin(line, closed, SMOOTH_ITERS);
+            path.moveTo(sm[0][0], sm[0][1]);
+            for (let m = 1; m < sm.length; m++) path.lineTo(sm[m][0], sm[m][1]);
+          }
+        }
+
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 0.8;
+        ctx.strokeStyle = `rgba(${lineRGB()}, 0.05)`;
+        ctx.stroke(minor);
+        ctx.lineWidth = 1.1;
+        ctx.strokeStyle = `rgba(${accentRGB()}, 0.14)`; // 每第 4 條「主曲線」帶墨綠
+        ctx.stroke(major);
+
+        requestAnimationFrame(draw);
+      }
+      requestAnimationFrame(draw);
+
+      // ── 深色模式切換 ──────────────────────────────
+      const html = document.documentElement;
+      const btn  = document.getElementById('theme-toggle');
+      const icon = document.getElementById('theme-icon');
+      if (html.getAttribute('data-theme') === 'dark') icon.textContent = '●';
+      btn.addEventListener('click', () => {
+        html.classList.add('theme-transitioning');
+        setTimeout(() => html.classList.remove('theme-transitioning'), 400);
+        const isDark = html.getAttribute('data-theme') === 'dark';
+        if (isDark) {
+          html.removeAttribute('data-theme');
+          localStorage.setItem('theme', 'light');
+          icon.textContent = '○';
+        } else {
+          html.setAttribute('data-theme', 'dark');
+          localStorage.setItem('theme', 'dark');
+          icon.textContent = '●';
+        }
+      });
+    </script>
+  </body>
+</html>
