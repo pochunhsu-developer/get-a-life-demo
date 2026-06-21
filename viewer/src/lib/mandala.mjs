@@ -1,4 +1,4 @@
-// 資料層存取：讀 ../mandala/*.md（永久日記，B），把 frontmatter + 註記 log 解析成
+// 資料層存取：讀資料目錄裡的 N-大格.md（純 Markdown 日記），把 frontmatter + 註記 log 解析成
 // render 用的結構；寫回時用「外科式字串編輯」append 一行註記並更新 last_tended，
 // 絕不重新序列化 YAML（避免打亂手寫的中文 frontmatter 排版）。
 import fs from 'node:fs';
@@ -129,7 +129,7 @@ export function freshness(lastTended, today = new Date()) {
   return { state: 'alive', days, level };
 }
 
-// 大格新鮮度 = 任一活躍小格的最近註記（純由註記推導；不採用被建檔日污染的
+// 大格新鮮度 = 所有活躍小格中、最近一筆註記的日期（純由註記推導；不採用被建檔日污染的
 // frontmatter last_tended，否則從沒碰過的地也會因「昨天建檔」而假性發亮）。
 export function fieldFreshness(field, today = new Date()) {
   const dates = [];
@@ -139,7 +139,7 @@ export function fieldFreshness(field, today = new Date()) {
   return freshness(latest, today);
 }
 
-// ── 寫回：append 一行註記 + 更新 last_tended（照月度儀式）──────────────
+// ── 寫回：append 一行 dated 註記 + 同步更新 last_tended ──────────────
 
 export function addAnnotation({ filename, word, text, date }) {
   if (!FILE_RE.test(filename)) throw new Error(`非法檔名：${filename}`);
