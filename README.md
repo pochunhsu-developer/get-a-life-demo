@@ -1,5 +1,8 @@
 # Get a Life
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Built with Astro](https://img.shields.io/badge/built%20with-Astro-BC52EE?logo=astro&logoColor=white)](https://astro.build)
+
 一個幫自己盤點人生的小工具：資料是純 Markdown，搭配一個本機 viewer，把生活分成八個領域畫成一張九宮格，讓你看得到自己最近把心力放在哪、哪些地方很久沒碰。
 
 ![全貌](docs/shots/01-hero.png)
@@ -96,6 +99,30 @@ last_tended: 2026-06-09
 ## 打造方式
 
 這個專案是用 AI coding agent（Claude Code）協助開發的，git 歷史裡的 commit 都標了 Claude 為共同作者。
+
+## 技術
+
+- **前端**：Astro 6。寫回 `.md` 靠 dev server 的 on-demand API route。
+- **資料解析**：js-yaml。沒有資料庫、沒有外部服務、沒有 API 金鑰。
+- 讀寫 `.md` 的資料層集中在 [viewer/src/lib/mandala.mjs](viewer/src/lib/mandala.mjs)，完整資料模型見 [MECHANISM.md](MECHANISM.md)。
+
+## 專案結構
+
+```
+get-a-life/
+├── demo-mandala/        # 範例資料（八個領域，各一個 .md）
+├── docs/shots/          # README 截圖
+├── DESIGN-NOTES.md      # 設計取捨
+├── MECHANISM.md         # 資料模型與互動規格
+└── viewer/              # 工具層（可拋棄）
+    ├── public/fonts/    # 自備字型（選用）
+    └── src/
+        ├── lib/mandala.mjs       # 讀寫 .md 的資料層
+        ├── layouts/Layout.astro
+        └── pages/
+            ├── index.astro       # 9×9 全貌與互動
+            └── api/              # 寫回的 on-demand route
+```
 
 ## 字型（選用，自備）
 
