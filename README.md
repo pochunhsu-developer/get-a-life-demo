@@ -57,18 +57,18 @@ npm install
 npm run dev          # http://localhost:4321
 ```
 
-第一次執行會讀取隨附的範例資料 `demo-mandala/`，不需任何設定就能看到完整畫面。Docker 用法見 [viewer/README.md](viewer/README.md)。
+第一次執行會讀取隨附的範例資料 `demo-mandala/`，不需任何設定就能看到完整畫面。想直接開始記自己的，見 **[如何上手 GETTING-STARTED.md](GETTING-STARTED.md)**。Docker 用法見 [viewer/README.md](viewer/README.md)。
 
 ## 用你自己的資料
 
-資料目錄由 `MANDALA_DIR` 決定，解析順序為：環境變數 → `mandala/` → `demo-mandala/`。
+從空白範本開始（完整步驟見 [如何上手 GETTING-STARTED.md](GETTING-STARTED.md)）：
 
 ```bash
-cp -r demo-mandala mandala     # mandala/ 已列入 gitignore，不會進 repo
-# 編輯 mandala/*.md 換成你自己的八塊領域，重啟 dev server 生效
+cp -r template-mandala mandala   # mandala/ 已列入 gitignore，不會進 repo
+# 編輯 mandala/ 裡的八個檔，換成你自己的領域與方向，重啟 dev server 生效
 ```
 
-`demo-mandala/` 的八塊只是範例，可以整批換掉。也可以不複製，直接指定路徑：`MANDALA_DIR=/path/to/yours npm run dev`。
+資料目錄由 `MANDALA_DIR` 決定，解析順序為：環境變數 → `mandala/` → `demo-mandala/`。也可以不複製、直接指定路徑：`MANDALA_DIR=/path/to/yours npm run dev`。
 
 ## 資料格式
 
@@ -111,7 +111,9 @@ last_tended: 2026-06-09
 ```
 get-a-life/
 ├── demo-mandala/        # 範例資料（八個領域，各一個 .md）
+├── template-mandala/    # 空白範本：複製成 mandala/ 開始記自己的
 ├── docs/shots/          # README 截圖
+├── GETTING-STARTED.md   # 如何上手
 ├── DESIGN-NOTES.md      # 設計取捨
 ├── MECHANISM.md         # 資料模型與互動規格
 └── viewer/              # 工具層（可拋棄）
