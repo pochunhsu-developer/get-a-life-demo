@@ -20,6 +20,8 @@ export const MANDALA_DIR = process.env.MANDALA_DIR
     : path.join(ROOT, 'demo-mandala');
 
 const FILE_RE = /^\d-.*\.md$/;
+// 同步工具（Drive / Dropbox / iCloud / Syncthing）在衝突時產生的副本檔，略過不讀。
+const CONFLICT_RE = /conflicted copy|sync-conflict|\.conflict\b/i;
 const DATE_RE = /\d{4}-\d{2}-\d{2}/;
 
 // 把可能多行的使用者輸入壓成單行：註記與下一步在 .md 裡都是「一行」格式。
@@ -33,7 +35,11 @@ const oneLine = (s) => String(s ?? '').replace(/\s*\r?\n\s*/g, ' ').trim();
 //  7 嗜好    8 夢想    9 家庭伴侶
 
 export function readFields() {
-  const files = fs.readdirSync(MANDALA_DIR).filter((f) => FILE_RE.test(f));
+  const all = fs.readdirSync(MANDALA_DIR);
+  const conflicts = all.filter((f) => FILE_RE.test(f) && CONFLICT_RE.test(f));
+  if (conflicts.length)
+    console.warn(`[mandala] 略過同步衝突副本（請手動合併後刪除）：${conflicts.join('、')}`);
+  const files = all.filter((f) => FILE_RE.test(f) && !CONFLICT_RE.test(f));
   const fields = files.map(parseFile).sort((a, b) => a.position - b.position);
   // 跨檔守門：兩塊地不能搶同一個九宮格位置（否則畫面上一塊會靜默蓋掉另一塊）。
   const seen = new Map();
