@@ -1,6 +1,6 @@
 // 資料層存取：讀資料目錄裡的 N-大格.md（純 Markdown 日記），把 frontmatter + 註記 log 解析成
-// render 用的結構；寫回時用「外科式字串編輯」append 一行註記並更新 last_tended，
-// 絕不重新序列化 YAML（避免打亂手寫的中文 frontmatter 排版）。
+// render 用的結構；寫回時只在內文 append 一行註記，不動 frontmatter
+// （新鮮度一律由內文註記推導，frontmatter 不存日期）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -51,14 +51,6 @@ export function readFields() {
   return fields;
 }
 
-// js-yaml 會把 `2026-06-15` 自動解析成 Date 物件，統一轉回 YYYY-MM-DD 字串，
-// 否則跟註記來的字串混在一起比較會炸。
-function ymd(v) {
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
-  if (typeof v === 'string') return v;
-  return null;
-}
-
 function splitFrontmatter(raw) {
   const m = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!m) return { fm: '', body: raw };
@@ -89,13 +81,11 @@ function parseFile(filename) {
     const latest = annotations.length ? annotations[annotations.length - 1].date : null;
     return {
       word,
-      born: ymd(c.born),
       archived: !!c.archived,
       annotations,
-      // 荒廢由「最新註記日期」推導（規格：renderer 自動從註記推導）。
+      // 荒廢由「最新註記日期」推導（renderer 自動從內文註記推導）。
       // null = 從來沒有 dated 註記 = 誠實的迷霧。
       lastTended: latest,
-      fmLastTended: ymd(c.last_tended),
       // 下一步：獨立於助記的「想清楚但還沒開始做的一步」。一格至多一個；null = 沒設。
       nextStep: nextByWord[word] || null,
     };
@@ -117,7 +107,6 @@ function parseFile(filename) {
     field: data['大格'],
     position: data.position,
     note: data.note ?? null,
-    fmLastTended: ymd(data.last_tended),
     cells,
   };
 }
@@ -166,8 +155,7 @@ export function freshness(lastTended, today = new Date()) {
   return { state: 'alive', days, level };
 }
 
-// 大格新鮮度 = 所有活躍小格中、最近一筆註記的日期（純由註記推導；不採用被建檔日污染的
-// frontmatter last_tended，否則從沒碰過的地也會因「昨天建檔」而假性發亮）。
+// 大格新鮮度 = 所有活躍小格中、最近一筆註記的日期（純由內文註記推導）。
 export function fieldFreshness(field, today = new Date()) {
   const dates = [];
   for (const c of field.cells) if (!c.archived && c.lastTended) dates.push(c.lastTended);
@@ -176,7 +164,7 @@ export function fieldFreshness(field, today = new Date()) {
   return freshness(latest, today);
 }
 
-// ── 寫回：append 一行 dated 註記 + 同步更新 last_tended ──────────────
+// ── 寫回：append 一行 dated 註記到內文（不動 frontmatter）──────────────
 
 export function addAnnotation({ filename, word, text, date }) {
   if (!FILE_RE.test(filename)) throw new Error(`非法檔名：${filename}`);
@@ -185,8 +173,7 @@ export function addAnnotation({ filename, word, text, date }) {
   const raw = fs.readFileSync(full, 'utf8');
   const { fm, body } = splitFrontmatter(raw);
   const newBody = insertAnnotation(body, word, `- ${date} — ${oneLine(text)}`);
-  const newFm = updateLastTended(fm, word, date);
-  fs.writeFileSync(full, `---\n${newFm}\n---\n${newBody}`, 'utf8');
+  fs.writeFileSync(full, `---\n${fm}\n---\n${newBody}`, 'utf8');
 }
 
 function insertAnnotation(body, word, newLine) {
@@ -201,37 +188,7 @@ function insertAnnotation(body, word, newLine) {
   return [...lines.slice(0, i), lines[i], ...content, '', ...lines.slice(j)].join('\n');
 }
 
-// last_tended 只往前、不倒退（取 max）：補記比較舊的日期時，不該把時間戳往回拉。
-// 日期是 YYYY-MM-DD，字串比較即時間順序。
-function updateLastTended(fm, word, date) {
-  const lines = fm.split('\n');
-  // 1) 大格層第一個 top-level last_tended
-  for (let k = 0; k < lines.length; k++) {
-    const m = lines[k].match(/^last_tended:\s*(\S+)/);
-    if (m) {
-      if (date > m[1]) lines[k] = `last_tended: ${date}`;
-      break;
-    }
-  }
-  // 2) 小格層：找到 `- 詞: word`，更新其縮排塊內第一個 last_tended
-  const wordIdx = lines.findIndex((l) => {
-    const m = l.match(/^\s*-\s*詞:\s*(.+?)\s*$/);
-    return m && m[1].trim() === word;
-  });
-  if (wordIdx !== -1) {
-    for (let k = wordIdx + 1; k < lines.length; k++) {
-      if (/^\s*-\s*詞:/.test(lines[k])) break;
-      const m = lines[k].match(/^(\s*)last_tended:\s*(\S+)/);
-      if (m) {
-        if (date > m[2]) lines[k] = `${m[1]}last_tended: ${date}`;
-        break;
-      }
-    }
-  }
-  return lines.join('\n');
-}
-
-// ── 下一步：設定／取代／清除（不碰 frontmatter、不動 last_tended）────────────
+// ── 下一步：設定／取代／清除（不碰 frontmatter）────────────
 // 「下一步」是想清楚但還沒開始做的一步，刻意獨立於助記：不刷新新鮮度、不算荒廢。
 // text 為空字串 = 清除。
 

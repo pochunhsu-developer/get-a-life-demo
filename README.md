@@ -78,11 +78,8 @@ cp -r template-mandala mandala   # mandala/ 已列入 gitignore，不會進 repo
 ---
 大格: 嗜好
 position: 7
-last_tended: 2026-06-09
 小格:
   - 詞: 登山
-    born: 2026-01-01
-    last_tended: 2026-06-09
     archived: false
 ---
 
