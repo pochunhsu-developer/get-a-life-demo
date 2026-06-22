@@ -130,6 +130,11 @@ get-a-life/
 
 介面的襯線字會優先用自訂明體，找不到就退回系統襯線字。repo 不附任何字型檔，因為多數中文明體是付費商用字型，不適合連同公開 repo 一起散布。不放字型也能正常執行，會退回 `Songti TC`、`Noto Serif CJK`、`Georgia` 等系統字。想用自己偏好的明體，把你有授權的 `.otf` 放進 [viewer/public/fonts/](viewer/public/fonts/)，檔名見該資料夾說明。
 
+## 靈感來源
+
+- 九宮格結構借自曼陀羅計畫（大谷翔平用過的那種目標法）。
+- 「把資料留在檔案裡」的取捨，呼應 Steph Ango 的 [File over app](https://stephango.com/file-over-app)。
+
 ## License
 
 [MIT](LICENSE)。程式碼與設計筆記可自由取用，範例資料為虛構。字型需自備（見上）。
