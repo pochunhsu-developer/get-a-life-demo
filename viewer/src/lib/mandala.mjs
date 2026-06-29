@@ -52,10 +52,12 @@ export function readFields() {
 }
 
 function splitFrontmatter(raw) {
-  // 接受 LF 與 CRLF：Windows clone（core.autocrlf=true）會把 .md 換成 CRLF，
-  // 只認 \n 會讓整個 frontmatter 被當空字串、所有檔案 fail loud。
-  const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-  if (!m) return { fm: '', body: raw };
+  // 一律正規化成 LF：Windows clone（core.autocrlf=true）會把 .md 換成 CRLF，
+  // 內文逐行解析時尾端的 \r 會讓 `^-\s*日期…(.*)$` 之類的 regex 整批 miss、註記靜默消失。
+  // 在唯一的入口處轉一次，下游所有 regex 都不必再煩惱換行。
+  const text = raw.replace(/\r\n/g, '\n');
+  const m = text.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  if (!m) return { fm: '', body: text };
   return { fm: m[1], body: m[2] };
 }
 
