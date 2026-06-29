@@ -52,7 +52,9 @@ export function readFields() {
 }
 
 function splitFrontmatter(raw) {
-  const m = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  // 接受 LF 與 CRLF：Windows clone（core.autocrlf=true）會把 .md 換成 CRLF，
+  // 只認 \n 會讓整個 frontmatter 被當空字串、所有檔案 fail loud。
+  const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!m) return { fm: '', body: raw };
   return { fm: m[1], body: m[2] };
 }

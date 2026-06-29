@@ -1,0 +1,9 @@
+# 把資料檔（.md 日記）與設定檔釘成 LF，避免 Windows clone（core.autocrlf=true）
+# 把它們換成 CRLF 後撞到 frontmatter / 解析器的換行假設。
+* text=auto eol=lf
+*.md text eol=lf
+*.mjs text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
